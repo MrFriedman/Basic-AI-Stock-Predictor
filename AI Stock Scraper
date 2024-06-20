@@ -1,0 +1,85 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import requests
+import pandas as pd
+
+# Function to fetch stock market data using Alpha Vantage API
+def fetch_stock_data(symbol, api_key, interval='1d', outputsize='compact'):
+    url = f'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}&outputsize={outputsize}&apikey={api_key}'
+    response = requests.get(url)
+    data = response.json()
+    
+    if 'Time Series (Daily)' in data:
+        df = pd.DataFrame.from_dict(data['Time Series (Daily)'], orient='index')
+        df = df.sort_index()
+        df = df.astype(float)
+        return df[['4. close']]  # Use the closing price for predictions
+    else:
+        raise ValueError("Error fetching data. Check the API call and symbol.")
+
+# Fetch data
+symbol = 'AAPL'  # Example stock symbol
+api_key = 'your_api_key_here'  # Replace with your Alpha Vantage API key
+stock_data = fetch_stock_data(symbol, api_key)
+stock_data.reset_index(drop=True, inplace=True)
+
+# Create data points
+x = np.arange(len(stock_data)).reshape(-1, 1)  # Generate x values (days)
+y = stock_data.values  # Use the closing prices as y values
+
+# Split data into training and test sets
+train_split = int(0.8 * len(x))
+X_train, y_train = x[:train_split], y[:train_split]
+x_test, y_test = x[train_split:], y[train_split:]
+
+# Function to plot the predictions
+def plot_predictions(train_data=X_train,
+                     train_labels=y_train,
+                     test_data=x_test,
+                     test_labels=y_test,
+                     predictions=None):
+    plt.figure(figsize=(10, 7))
+    plt.scatter(train_data, train_labels, c="b", s=4, label="Training data")
+    plt.scatter(test_data, test_labels, c="g", s=4, label="Test data")
+    if predictions is not None:
+        plt.scatter(test_data, predictions, c="r", s=4, label="Predictions")
+    plt.legend(prop={'size': 14})
+    plt.show()
+
+# Initialize weights and bias randomly
+weights = np.random.randn(1)
+bias = np.random.randn(1)
+
+# Initial predictions before training
+initial_preds = weights * x_test + bias
+plot_predictions(test_data=x_test, test_labels=y_test, predictions=initial_preds)
+
+# Define learning rate and number of epochs for training
+learning_rate = 0.0001
+epochs = 8000
+
+# Training loop
+for epoch in range(epochs):
+    # Forward pass
+    y_preds = weights * X_train + bias
+    loss = np.mean(np.abs(y_preds - y_train))
+    
+    # Compute gradients
+    grad_weights = np.mean(np.sign(y_preds - y_train) * X_train)
+    grad_bias = np.mean(np.sign(y_preds - y_train))
+    
+    # Update weights and bias
+    weights -= learning_rate * grad_weights
+    bias -= learning_rate * grad_bias
+    
+    # Evaluation on test data
+    test_pred = weights * x_test + bias
+    test_loss = np.mean(np.abs(test_pred - y_test))
+    
+    # Print model state every 10 epochs
+    if epoch % 10 == 0:
+        print(f"Epoch {epoch}: Weights: {weights}, Bias: {bias}, Train Loss: {loss}, Test Loss: {test_loss}")
+
+# Final predictions after training
+y_preds = weights * x_test + bias
+plot_predictions(test_data=x_test, test_labels=y_test, predictions=y_preds)
